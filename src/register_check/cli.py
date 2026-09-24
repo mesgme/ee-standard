@@ -17,6 +17,9 @@ Exit codes for a run, per ADR 0016:
     3  no violation found, but at least one applicable control could not be
        verified — a missing tool, or a remote block with no credentials
 
+`--format json` prints the same report as data for `run` and `deployments`
+(ADR 0056). It never changes an exit code.
+
 `--require-complete` promotes 3 to 1, for the pipeline that must be
 authoritative. A predicate skip is not incompleteness: a repo with no Terraform
 genuinely satisfies IAC-001's applicability, so those runs still exit 0.
@@ -38,12 +41,13 @@ from register_check.deployments import (
 )
 from register_check.deployments import build as build_deployments
 from register_check.deployments import render as render_deployments
+from register_check.deployments import render_json as render_deployments_json
 from register_check.meta import META_CHECKS
 from register_check.publish import publish
 from register_check.register import Control, Register, load_register
 from register_check.remote import resolve as resolve_remote
 from register_check.repo import NotAGitRepository, Repo, git, require_git_repo
-from register_check.report import render
+from register_check.report import render, render_json
 from register_check.runner import Verdict, exit_code, run_command_assert, run_control
 from register_check.variance import (
     Direction,
@@ -95,6 +99,12 @@ def _parser() -> argparse.ArgumentParser:
         "--require-complete",
         action="store_true",
         help="exit 1 rather than 3 when a control could not be verified",
+    )
+    parser.add_argument(
+        "--format",
+        choices=("text", "json"),
+        default="text",
+        help="how `run` and `deployments` print their report (default: text; ADR 0056)",
     )
     sub = parser.add_subparsers(dest="command")
     run = sub.add_parser("run", help="run all applicable controls (the default)")
@@ -206,6 +216,7 @@ def _cmd_run(
     require_complete: bool,
     ids: list[str] | None = None,
     github_repo: str | None = None,
+    as_json: bool = False,
 ) -> int:
     """A conformance run, optionally narrowed to a tier or to named controls.
 
@@ -248,7 +259,7 @@ def _cmd_run(
         if ids is not None
         else [run_meta_control(meta, register, repo, remote) for meta in register.meta_controls]
     )
-    print(render(register, results, meta_results))
+    print((render_json if as_json else render)(register, results, meta_results))
     verdicts = [r.verdict for r in results] + [m[2] for m in meta_results]
     # A predicate-skipped control ran nothing, so its partial declarations say
     # nothing about this run — counting them would make exit 3 fire for controls
@@ -332,6 +343,7 @@ def _cmd_deployments(
     plugin: Path | None,
     decisions: Path | None = None,
     installed: Path | None = None,
+    as_json: bool = False,
 ) -> int:
     """Report deployment currency, gate by gate.
 
@@ -366,7 +378,7 @@ def _cmd_deployments(
         # deployment as a chore nobody got to (ADR 0042 rev 2).
         print(f"deployments: {exc}", file=sys.stderr)
         return 2
-    print(render_deployments(report, register))
+    print((render_deployments_json if as_json else render_deployments)(report, register))
     # A stale *record* fails where a stale *deployment* does not. The second is
     # a recommendation; the first is a claim that has stopped being true — an
     # expired declination is a permanent exemption wearing a reason, which is
@@ -478,10 +490,27 @@ def _cmd_publish(repo_path: Path) -> int:
 
 
 def _dispatch(args: argparse.Namespace, repo_path: Path, register_path: Path | None) -> int:
+    as_json = args.format == "json"
+    # A format a command cannot honour is a usage error, never a silent fall
+    # back to text: a consumer parsing the output would fail on the first line
+    # and learn nothing about why.
+    if as_json and args.command not in (None, "run", "deployments"):
+        print(
+            f"register-check: --format json is not supported by {args.command!r} "
+            "(only run and deployments)",
+            file=sys.stderr,
+        )
+        return 2
     match args.command:
         case None:
             return _cmd_run(
-                repo_path, register_path, None, args.require_complete, None, args.github_repo
+                repo_path,
+                register_path,
+                None,
+                args.require_complete,
+                None,
+                args.github_repo,
+                as_json,
             )
         case "run":
             return _cmd_run(
@@ -491,6 +520,7 @@ def _dispatch(args: argparse.Namespace, repo_path: Path, register_path: Path | N
                 args.require_complete,
                 args.control,
                 args.github_repo,
+                as_json,
             )
         case "schema":
             return _cmd_schema(repo_path, register_path)
@@ -504,7 +534,12 @@ def _dispatch(args: argparse.Namespace, repo_path: Path, register_path: Path | N
             return _cmd_explain(repo_path, register_path, args.id)
         case "deployments":
             return _cmd_deployments(
-                repo_path, register_path, args.plugin, args.decisions, args.installed
+                repo_path,
+                register_path,
+                args.plugin,
+                args.decisions,
+                args.installed,
+                as_json,
             )
         case "publish":
             return _cmd_publish(repo_path)

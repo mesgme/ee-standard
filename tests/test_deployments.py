@@ -328,6 +328,33 @@ def test_a_defect_does_change_the_exit_code(tmp_path: Path) -> None:
     assert _cli(repo, _plugin(tmp_path)) == 1
 
 
+@pytest.mark.parametrize(("stamped", "state", "exit_"), [(5, "CURRENT", 0), (9, "AHEAD", 1)])
+def test_json_carries_each_gate_s_state_and_the_text_exit_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    stamped: int,
+    state: str,
+    exit_: int,
+) -> None:
+    """The same report as data, for a sweep that keeps it; the exit code is the text one's."""
+    repo = make_repo(tmp_path / "repo", {".pre-commit-config.yaml": _stamp(stamped)})
+    plugin = _plugin(tmp_path)
+    assert _cli(repo, plugin) == exit_
+    text = capsys.readouterr().out
+    argv = ["--repo", str(repo.root), "--register", "controls.yaml", "--format", "json"]
+    assert main([*argv, "deployments", "--plugin", str(plugin)]) == exit_
+    document = json.loads(capsys.readouterr().out)
+
+    assert document["format"] == 1
+    (gate,) = document["gates"]
+    assert gate["gate"] == "gate-secrets"
+    assert gate["state"] == state
+    assert state in text
+    assert gate["contract"] == 5
+    assert gate["deployed"] == [stamped]
+    assert {"owed", "declined", "stale_decisions", "unreconciled"} <= document.keys()
+
+
 def test_no_plugin_is_a_usage_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = make_repo(tmp_path / "repo", {"README.md": "#\n"})
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)

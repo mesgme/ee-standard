@@ -155,7 +155,7 @@ for where anything lives. Both are more current than any list kept here.
 | `docs/04-build-plan.md` | The only list of outstanding work |
 | `docs/08-adopting.md` | The adoption reference. Every phase owes it the steps it introduces |
 | `docs/14-file-map.md` | Which file, and why three config files are three |
-| `docs/adr/` | Every decision in force, **except any marked `Proposed`** — open, awaiting a second reader, and not to be implemented as though settled. Today: none. `archive/` holds the retired |
+| `docs/adr/` | Every decision in force, **except any marked `Proposed`** — open, awaiting a second reader, and not to be implemented as though settled. Today: 0056 (`--format json`). `archive/` holds the retired |
 | `docs/09`–`docs/17` | Phase records and reviews, in order |
 | `docs/craft/plan.md` | **Craft** — the coding-standards workstream for Python and React, which the register is deliberately silent about. Its own naming standard and stages; not a phase of the build plan, and it mints no controls |
 | `craft/` | **The Craft register** — `meta.yaml` plus one file per scope. Coding standards, not controls. `tests/test_craft_register.py` checks it; `register-check` deliberately does not (ADR 0053), and `docs/craft/assess.rules.md` is now a stage record rather than a source |
