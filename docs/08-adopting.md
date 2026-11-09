@@ -2157,6 +2157,11 @@ are different questions, and the second has its own command:
 uv run register-check deployments
 ```
 
+Both this and a conformance run take `--format json` before the command
+(`uv run register-check --format json deployments`) to print the same report as
+data, with the same exit code, for a tool that keeps it
+([ADR 0056](adr/0056-the-checker-has-a-machine-readable-report.md)).
+
 It reads the plugin's `.claude-plugin/deploys.json` — which gate writes what, at
 which **deployment contract** — and the `ee-control:` stamps in your repository,
 and it gives each gate one of six states:

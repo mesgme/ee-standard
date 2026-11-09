@@ -27,6 +27,7 @@ import os
 import re
 from dataclasses import dataclass
 from enum import Enum
+from importlib.metadata import version as installed_version
 from pathlib import Path
 
 import yaml
@@ -34,6 +35,7 @@ import yaml
 from register_check.provenance import stamps_by_file
 from register_check.register import Control, Register
 from register_check.repo import Repo
+from register_check.report import JSON_FORMAT
 from register_check.runner import applies
 
 #: The sidecar's shape this code understands. A file declaring anything else is
@@ -724,6 +726,47 @@ def render(report: Report, register: Register) -> str:
             "recommendation to re-run it, not a failure."
         )
     return "\n".join(lines)
+
+
+def render_json(report: Report, register: Register) -> str:
+    """The report `render` prints, as data (ADR 0056), deciding nothing of its own."""
+    document = {
+        "format": JSON_FORMAT,
+        "checker_version": installed_version("register-check"),
+        "register_version": register.version,
+        "register_contract": register.register_contract,
+        "plugin": str(report.plugin),
+        "gates": [
+            {
+                "gate": gate.gate.name,
+                "state": str(gate.state),
+                "contract": gate.gate.contract,
+                "controls": list(gate.gate.controls),
+                "deployed": list(gate.deployed),
+                "stamped_paths": list(gate.stamped_paths),
+                "absent_paths": list(gate.absent_paths),
+                "explanation": _explain(gate),
+            }
+            for gate in sorted(report.gates, key=lambda g: _loudness(g, register))
+        ],
+        "owed": [gate.gate.name for gate in report.owed],
+        "defective": [gate.gate.name for gate in report.defective],
+        "foreign": [{"skill": skill, "control": control} for skill, control in report.foreign],
+        "declined": [
+            {
+                "skill": entry.skill,
+                "version": entry.version,
+                "reason": entry.reason,
+                "review_by": entry.review_by.isoformat(),
+                "adr": entry.adr,
+            }
+            for entry in report.declined
+        ],
+        "stale_decisions": list(report.stale_decisions),
+        "unreconciled": list(report.unreconciled),
+        "unmanaged_pins": list(report.unmanaged_pins),
+    }
+    return json.dumps(document, indent=2)
 
 
 def _explain(gate: GateReport) -> str:
