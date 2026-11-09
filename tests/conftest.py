@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import shutil
 import subprocess
 from collections.abc import Mapping
@@ -18,6 +19,18 @@ from register_check.remote import CI_VARIABLE, TOKEN_VARIABLES, GitHub
 from register_check.repo import Repo
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The pre-push hook runs this suite (TST-001), and git runs a hook with
+# `GIT_DIR` and `GIT_INDEX_FILE` pointing at the repository being pushed — from
+# a linked worktree, as absolute paths. Every `git` a test spawns inherits them,
+# so a fixture's `git -C <tmp_path> commit` lands on the branch being pushed.
+# Git names the variables that locate a repository; none of them may reach a
+# test. Cleared for the whole process rather than per test, because a fixture
+# of any scope can build a repository.
+for _variable in subprocess.run(
+    ["git", "rev-parse", "--local-env-vars"], capture_output=True, text=True, check=True
+).stdout.split():
+    os.environ.pop(_variable, None)
 
 
 @pytest.fixture(autouse=True)
